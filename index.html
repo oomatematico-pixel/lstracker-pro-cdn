@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="icon" type="image/x-icon" href="assets/logo.ico">
+    <title>L&S Tracker Pro - v12.5.5 (Master)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root { --primary: #2563eb; --success: #16a34a; --danger: #dc2626; --bg: #f8fafc; }
+        body { opacity: 0; transition: opacity 0.5s ease-in; background-color: var(--bg); font-family: 'Inter', sans-serif; margin: 0; }
+        body.app-ready { opacity: 1; }
+        .card { background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; }
+        .input-std { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; outline: none; }
+        .asset-box { width: 100%; min-height: 100px; font-family: monospace; font-size: 12px; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fdfdfd; }
+        .table-scroll { max-height: 450px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+        #watermark { position: fixed; bottom: 10px; right: 15px; font-size: 10px; color: #94a3b8; pointer-events: none; z-index: 9999; }
+        #offline-overlay { display: none; position: fixed; inset: 0; z-index: 20000; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(8px); color: white; text-align: center; align-items: center; justify-content: center; padding: 20px; }
+        .loading-pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+		<div id="offline-overlay">
+			<div class="max-w-sm mx-auto">
+				<h1 class="text-6xl mb-6">🌐</h1>
+				<h2 class="text-2xl font-bold mb-3 uppercase tracking-tight">Conexão Interrompida</h2>
+				<!-- ADICIONE A ID ABAIXO -->
+				<p id="offline-message" class="text-sm text-slate-300 mb-6 italic">Verificando sinal...</p>
+				<div class="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
+					<div id="offline-progress" class="bg-blue-500 h-full w-0 transition-all duration-[5000ms] ease-linear"></div>
+				</div>
+			</div>
+		</div>
+
+    <div id="app-container" class="max-w-7xl mx-auto space-y-6" style="display:none;">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-end border-b pb-4 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-800">L&S Tracker <span id="title-suffix">Pro</span></h1>
+                <p class="text-sm text-slate-500 italic">Análise de Cointegração e Gestão Operacional</p>
+            </div>
+            <div class="flex flex-col items-end gap-1">
+                <button onclick="toggleManual()" class="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-tighter flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.444 1.103m0 4.806h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Ajuda / White Paper
+                </button>
+                <div id="connection-status" class="text-xs font-semibold flex items-center gap-4">
+                    <div class="flex items-center gap-2"><div id="status-dot" class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div> <span id="status-text" class="text-slate-400 font-bold uppercase">API B3 ONLINE</span></div>
+                    <button onclick="exportarBaseCompleta()" title="Exportar DB Full" class="hover:text-blue-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-4 bg-slate-50 border-dashed border-2">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-[9px] font-bold text-slate-600 uppercase mb-1">Token Brapi:</label>
+                    <div class="flex gap-2"><input type="password" id="apiToken" class="flex-1 p-2 border rounded-md text-xs" placeholder="Token..."><button onclick="saveApiToken('ls_pro_token', 'apiToken')" class="bg-slate-800 text-white px-3 py-1 rounded-md font-bold text-[9px]">SALVAR</button></div>
+                </div>
+                <div>
+                    <label class="block text-[9px] font-bold text-slate-600 uppercase mb-1">Token HG Brasil:</label>
+                    <div class="flex gap-2"><input type="password" id="apiTokenBackup" class="flex-1 p-2 border rounded-md text-xs" placeholder="Token..."><button onclick="saveApiToken('ls_pro_token_backup', 'apiTokenBackup')" class="bg-slate-800 text-white px-3 py-1 rounded-md font-bold text-[9px]">SALVAR</button></div>
+                </div>
+            </div>
+            <div class="mt-2 pt-2 border-t border-slate-200"><button onclick="abrirGestãoAtivos()" class="text-[10px] font-bold text-slate-600 hover:text-blue-600 uppercase flex items-center gap-1">⚙️ Gerenciar Lista de Ativos</button></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 card p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <div class="flex items-center gap-2"><h3 class="font-bold text-slate-700 uppercase text-xs tracking-widest">1. Análise de Spread e Desvio</h3><button onclick="exportarDadosModulo1()" class="text-slate-400 hover:text-blue-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></button></div>
+                    <button onclick="carregarDadosAPI()" class="bg-slate-800 text-white px-4 py-2 rounded text-[10px] font-bold hover:bg-slate-700 shadow-sm">CARREGAR DADOS API</button>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6 bg-slate-50 p-4 rounded-lg">
+                    <div class="flex flex-col gap-1"><label class="text-[9px] font-bold text-slate-500 uppercase">Ativo X</label><select id="assetX" class="input-std"></select></div>
+                    <div class="flex flex-col gap-1"><label class="text-[9px] font-bold text-slate-500 uppercase">Ativo Y</label><select id="assetY" class="input-std"></select></div>
+                    <div class="flex flex-col gap-1"><label class="text-[9px] font-bold text-slate-500 uppercase">Banda</label><select id="bandType" class="input-std"><option value="rolling">Móvel</option><option value="static">Estática</option></select></div>
+                    <div class="flex flex-col gap-1"><label class="text-[9px] font-bold text-slate-500 uppercase">Janela | Escala</label><div class="flex gap-1"><input type="number" id="windowSize" value="45" class="w-1/2 input-std text-center"><select id="priceMode" class="w-1/2 input-std"><option value="log">Log</option><option value="raw">R$</option></select></div></div>
+                    <button onclick="recalcularGraficoLocal()" class="bg-blue-600 text-white rounded text-[10px] font-bold hover:bg-blue-700 h-[34px] self-end">ATUALIZAR GRÁFICO</button>
+                </div>
+                <div class="h-[380px]"><canvas id="mainChart"></canvas></div>
+            </div>
+
+            <div class="card p-6 flex flex-col">
+                <div class="flex items-center gap-2 mb-6"><h3 class="font-bold text-slate-700 uppercase text-xs tracking-widest">2. Simulador de Alocação</h3><button onclick="exportarDadosModulo2()" class="text-slate-400 hover:text-blue-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></button></div>
+                <div class="grid grid-cols-2 gap-3 mb-6">
+                    <div class="flex flex-col gap-1"><label class="text-[9px] font-bold text-slate-500 uppercase">Capital (R$)</label><input type="number" id="inputCapital" value="50000" oninput="calcularFinanceiro()" class="input-std"></div>
+                    <div class="flex flex-col gap-1"><label class="text-[9px] font-bold text-slate-500 uppercase">Qtd Ativo Y</label><input type="number" id="inputQtdY" value="1000" oninput="calcularFinanceiro()" class="input-std"></div>
+                    <div class="flex flex-col gap-1"><label class="text-[9px] font-bold text-slate-500 uppercase">Deságio (%)</label><input type="number" id="inputDesagio" value="20" oninput="calcularFinanceiro()" class="input-std"></div>
+                    <div class="flex flex-col gap-1"><label class="text-[9px] font-bold text-slate-500 uppercase">Margem (%)</label><input type="number" id="inputMargem" value="120" oninput="calcularFinanceiro()" class="input-std"></div>
+                </div>
+                <div class="space-y-3 flex-1">
+                    <div class="p-3 border-l-4 border-green-500 bg-green-50 rounded-r">
+                        <div class="flex justify-between text-[10px] font-bold text-green-700 uppercase"><span>Long</span> <span id="labelTickerL">-</span></div>
+                        <div class="flex justify-between text-[10px] mt-1"><span>Qtd: <b id="resQtdL">0</b></span> <span>Pço: <b id="resPrecoL">0,00</b></span> <b id="resVolL">R$ 0,00</b></div>
+                    </div>
+                    <div class="p-3 border-l-4 border-red-500 bg-red-50 rounded-r">
+                        <div class="flex justify-between text-[10px] font-bold text-red-700 uppercase"><span>Short</span> <span id="labelTickerS">-</span></div>
+                        <div class="flex justify-between text-[10px] mt-1"><span>Qtd: <b id="resQtdS">0</b></span> <span>Pço: <b id="resPrecoS">0,00</b></span> <b id="resVolS">R$ 0,00</b></div>
+                    </div>
+                </div>
+                <div class="mt-6 pt-4 border-t space-y-2 text-[11px]">
+				    <!-- PAINEL ESTATÍSTICO (NOVO) -->
+					<div class="grid grid-cols-3 gap-y-3 gap-x-2 pb-4 mb-2 border-b border-slate-100 text-[8px] uppercase font-bold text-slate-400">
+						<div class="flex justify-between text-slate-700 text-[8px] uppercase"><span>Beta</span> <b id="statBeta" class="text-slate-500">-</b></div>
+						<div class="flex justify-between text-slate-700 text-[8px] uppercase"><span>Z-Score</span> <b id="statZ" class="text-slate-500">-</b></div>
+						<div class="flex justify-between text-slate-700 text-[8px] uppercase"><span>Correlação</span> <b id="statCorr" class="text-slate-500">-</b></div>
+						<div class="flex justify-between text-slate-700 text-[8px] uppercase"><span>Ratio Atual</span> <b id="statRatioAtu" class="text-slate-500">-</b></div>
+						<div class="flex justify-between text-slate-700 text-[8px] uppercase"><span>Ratio Médio</span> <b id="statRatioMed" class="text-slate-500">-</b></div>
+						<div class="flex justify-between text-slate-700 text-[8px] uppercase"><span>Desvio Padrão</span> <b id="statSD" class="text-slate-500">-</b></div>
+						<div class="flex justify-between text-slate-700 text-[8px] uppercase"><span>Ratio Mínimo</span> <b id="statRatioMin" class="text-slate-500">-</b></div>
+						<div class="flex justify-between text-slate-700 text-[8px] uppercase"><span>Ratio Máximo</span> <b id="statRatioMax" class="text-slate-500">-</b></div>
+						<div class="flex justify-between text-slate-700 text-[8px] uppercase border-b border-slate-100 pb-2 mb-2"><span>Vol. Spread</span> <b id="statVol" class="text-slate-500">-</b></div>
+					</div>
+                    <div class="flex justify-between text-slate-500 text-[9px] uppercase"><span>Exposição Total</span> <b id="resExpTotal">R$ 0,00</b></div>
+                    <div class="flex justify-between text-slate-500 text-[9px] uppercase"><span>Margem Requerida</span> <b id="resMargemFinal">R$ 0,00</b></div>
+                    <div class="flex justify-between text-slate-500 text-[9px] uppercase"><span>Aporte Extra</span> <b id="resAporte">R$ 0,00</b></div>
+                    <div class="flex justify-between items-center text-sm font-bold border-t pt-3"><span class="text-slate-600 uppercase text-[9px]">Uso do Capital</span> <span id="resUsoCapital" class="text-green-600">0.00%</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-6">
+            <div class="flex justify-between items-center mb-6"><div class="flex items-center gap-2"><h3 class="font-bold text-slate-700 uppercase text-xs tracking-widest">3. Scanner de Oportunidades</h3><button onclick="exportarDadosModulo3()" class="text-slate-400 hover:text-blue-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></button></div><div class="flex gap-4"><input type="number" id="minZ" value="1.5" step="0.1" class="border rounded p-1 text-xs w-16 text-center"><input type="text" id="filterTable" onkeyup="filtrarTabelaScanner()" placeholder="Pesquisar..." class="border rounded p-1 text-xs w-40 outline-none focus:ring-1 focus:ring-blue-500"></div></div>
+            <textarea id="listAtivos" class="asset-box mb-4" readonly></textarea>
+            <div class="flex justify-between items-center mb-4"><button id="btnScanner" onclick="executarScanner()" class="bg-green-600 text-white px-10 py-3 rounded-lg font-bold text-xs shadow-md">FILTRAR OPORTUNIDADES</button><div id="cache-info" class="text-[10px] font-bold text-slate-400 uppercase"></div></div>
+            <div class="table-scroll"><table class="w-full text-[11px] text-left border-collapse"><thead class="sticky top-0 bg-slate-100 font-bold uppercase text-[9px]"><tr><th class="p-4 border-b">Par (Y/X)</th><th class="p-4 border-b text-center">Beta</th><th class="p-4 border-b text-center">Z-Score</th><th class="p-4 border-b text-center">Sinal Inteligente</th><th class="p-4 border-b text-center">ADF</th></tr></thead><tbody id="scannerBody" class="divide-y divide-slate-100"></tbody></table></div>
+        </div>
+
+        <div class="card p-6 mt-10">
+            <div class="flex items-center gap-2 mb-6"><h3 class="font-bold text-slate-700 uppercase text-xs tracking-widest">4. Acompanhamento de Operações</h3><button onclick="exportarDadosModulo4()" class="text-slate-400 hover:text-blue-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg></button></div>
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-8 bg-slate-50 p-4 rounded-lg border border-slate-100">
+                <div class="flex flex-col gap-1"><label class="text-[9px] font-bold text-slate-500 uppercase">Comp (X)</label><select id="monX" class="input-std"></select></div>
+                <div class="flex flex-col gap-1"><label class="text-[9px] font-bold text-slate-500 uppercase">Vend (Y)</label><select id="monY" class="input-std"></select></div>
+                <div class="flex flex-col gap-1"><label class="text-[9px] font-bold text-slate-500 uppercase">Entrada (X|Y)</label><div class="flex gap-1"><input type="number" id="monPxX" class="w-1/2 input-std" placeholder="Px X"><input type="number" id="monPxY" class="w-1/2 input-std" placeholder="Px Y"></div></div>
+                <div class="flex flex-col gap-1"><label class="text-[9px] font-bold text-slate-500 uppercase">Qtd | Data</label><div class="flex gap-1"><input type="number" id="monQtd" class="w-1/2 input-std" placeholder="Qtd"><input type="date" id="monDate" class="w-1/2 input-std"></div></div>
+                <button onclick="adicionarOperacaoMonitorada()" class="bg-slate-800 text-white rounded text-[10px] font-bold hover:bg-slate-700 h-[34px] self-end">INSERIR</button>
+            </div>
+            <div class="table-scroll mb-6"><table class="w-full text-[11px] text-left border-collapse"><thead class="sticky top-0 bg-slate-100 text-[9px] font-bold uppercase"><tr><th class="p-3 border-b">Ativos | Dias</th><th class="p-3 border-b">Qtd</th><th class="p-3 border-b">Preços (E|A)</th><th class="p-3 border-b">Financeiro (C|V)</th><th class="p-3 border-b">P&L Ativos</th><th class="p-3 border-b">Ratio (E|A)</th><th class="p-3 border-b">Resultado Op.</th><th class="p-3 border-b text-center">Ações</th></tr></thead><tbody id="monitorBody" class="divide-y divide-slate-100"></tbody></table></div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t items-center">
+                <div class="flex gap-12">
+                    <div><p class="text-[9px] text-slate-400 uppercase font-bold">Capital em Risco</p><p id="totalCapMonitor" class="text-lg font-bold text-slate-700">R$ 0,00</p></div>
+                    <div><p class="text-[9px] text-slate-400 uppercase font-bold">Yield %</p><p id="totalYieldMonitor" class="text-lg font-bold text-green-600">0.00%</p></div>
+                    <div><p class="text-[9px] text-slate-400 uppercase font-bold">P&L Consolidado</p><p id="totalPnlMonitor" class="text-lg font-bold text-green-600">R$ 0,00</p></div>
+                </div>
+                <div class="text-right"><button onclick="atualizarMonitoramentoAPI()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold text-[10px] hover:bg-blue-700">SINCRONIZAR PREÇOS</button></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAIS -->
+ <!-- CONTEÚDO ATUALIZADO DO MODAL DE ATIVOS COM NAVEGAÇÃO PRO -->
+<!-- MODAIS -->
+    <!-- 1. MODAL DE GESTÃO DE ATIVOS E EDITOR PRO -->
+    <div id="modalAtivos" class="fixed inset-0 z-[10001] hidden flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-2xl rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
+            <!-- Cabeçalho com Abas -->
+            <div class="p-4 border-b bg-slate-50 flex justify-between items-center">
+                <div class="flex gap-4">
+                    <button onclick="alternarAbaAtivos('lista')" id="btnAbaLista" class="text-xs font-bold border-b-2 border-blue-600 pb-1 text-blue-600 uppercase tracking-tighter">Lista de Ativos</button>
+                    <button onclick="alternarAbaAtivos('editor')" id="btnAbaEditor" class="text-xs font-bold text-slate-400 hover:text-slate-600 pb-1 uppercase tracking-tighter hidden"> Editor Manual Ativos</button>
+                </div>
+                <button onclick="fecharGestãoAtivos()" class="text-slate-400 font-bold">✕</button>
+            </div>
+
+            <div class="p-6">
+                <!-- ABA 1: LISTA DE TICKERS (Comum para FLASH/PRO) -->
+                <div id="abaListaAtivos" class="space-y-4">
+                    <textarea id="txtConfigAtivos" class="asset-box h-48 outline-none focus:ring-2 focus:ring-blue-500" placeholder="PETR4, VALE3..."></textarea>
+                    <div class="flex justify-between gap-4">
+                        <button onclick="resetarAtivosPadrao()" class="text-[9px] font-bold text-red-600 hover:underline uppercase tracking-tight">Resetar Padrão</button>
+                        <button onclick="salvarListaPersonalizada()" class="bg-blue-600 text-white px-6 py-2 rounded font-bold text-xs shadow-sm hover:bg-blue-700">SALVAR LISTA</button>
+                    </div>
+                </div>
+
+                <!-- ABA 2: EDITOR DE COTAÇÕES (Exclusivo PRO) -->
+                <div id="abaEditorManual" class="hidden space-y-4">
+                    <div class="flex gap-2 mb-4">
+                        <select id="selAtivoEditor" class="flex-1 input-std"></select>
+                        <button onclick="carregarCotaçõesParaEdicao()" class="bg-slate-800 text-white px-4 py-2 rounded text-[10px] font-bold hover:bg-slate-700">CARREGAR GRADE</button>
+                    </div>
+                    <div class="table-scroll border rounded-lg" style="max-height: 300px;">
+                        <table class="w-full text-[11px] text-left border-collapse">
+                            <thead class="sticky top-0 bg-slate-100 font-bold uppercase">
+                                <tr>
+                                    <th class="p-2 border-b">Data</th>
+                                    <th class="p-2 border-b">Preço Fechamento (R$)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="editorManualBody" class="divide-y">
+                                <tr><td colspan="2" class="p-4 text-center text-slate-400 italic">Selecione um ativo e carregue a grade.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="flex justify-end pt-2">
+                        <button onclick="salvarEdicaoManualDB()" class="bg-green-600 text-white px-8 py-2 rounded font-bold text-xs hover:bg-green-700 shadow-md">
+                            SALVAR NO BANCO LOCAL
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. MODAL DO WHITE PAPER -->
+    <div id="modalManual" class="fixed inset-0 z-[10000] hidden flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-3xl max-h-[85vh] rounded-xl shadow-2xl flex flex-col border border-slate-200 overflow-hidden">
+            <div class="p-4 border-b bg-slate-50 flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <span class="bg-blue-600 text-white text-[9px] px-2 py-0.5 rounded font-bold tracking-tighter">PRO</span>
+                    <h3 class="font-bold text-slate-700 uppercase text-xs">White Paper v12.5</h3>
+                </div>
+                <button onclick="toggleManual()" class="text-slate-400 font-bold">✕</button>
+            </div>
+            <div id="manualContentInject" class="p-8 overflow-y-auto text-slate-600 text-sm space-y-8 leading-relaxed"></div>
+        </div>
+    </div>
+
+    <div id="watermark">Licenciado para: <span id="wm-name">---</span> | CPF: <span id="wm-cpf">---</span></div>
+
+    
+    <script src="assets/js/license-config.js"></script>
+    <script src="assets/js/tickers.js"></script>
+    <script src="assets/js/manual-content.js"></script>	
+    <script src="https://oomatematico-pixel.github.io/lstracker-pro-cdn/core-engine.min.js"></script>
+  
+  
+</body>
+</html>
